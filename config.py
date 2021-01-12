@@ -46,22 +46,22 @@ class PoseParams:
                                         ('Neck_x',
                                          'Neck_y')]  # pairs used for pose processing and acceptance calculation
     keys_to_use_for_estimation = ['MidHip_x', 'MidHip_y', 'BigToes_x', 'BigToes_y',
-                                  'Neck_x', 'Neck_y']
+                                  'Neck_x', 'Neck_y', 'frame_no']
     keys_to_use_for_fcs = keys_to_use_for_estimation_pairs
 
 
 @dataclass
 class FaceParams:
     keys_to_use_for_estimation_pairs = [('center_x', 'center_y')]
-    keys_to_use_for_estimation = ['center_x', 'center_y']
-    keys_to_use_for_fcs = [('center_x', 'center_y'), ('x1', 'y1'), ('x2', 'y2')]
-    keys_pairs = ["x1", "x2", "y1", "y2"]
+    keys_to_use_for_estimation = ['center_x', 'center_y', 'frame_no']
+    keys_to_use_for_fcs = [('center_x', 'center_y'), ('x1', 'y1'), ('x2', 'y2')] # should be all keys !!!
+    # keys_pairs = ["x1", "x2", "y1", "y2"]
 
 
 @dataclass
 class FaceInitialisationParams:
     iou_threshold = 0.4  # for initialisation
-    ids_counter = 0  # id to start numeration from
+    ids_counter = 1  # id to start numeration from
 
 
 @dataclass
