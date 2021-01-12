@@ -55,7 +55,7 @@ class TrackVisualization:
         self.resize_constant = resize_constant
         self.ids_counters = {}
         self.files_info_pairs = None
-        logo = cv2.imread('Logo_aihunters.png')
+        logo = cv2.imread('visualization/Logo_aihunters.png')
         self.logo = cv2.resize(logo, (self.width // 10, self.height // 10))
 
     def load_info(self):
@@ -128,11 +128,10 @@ class TrackVisualization:
             if DrawingParams.draw_logo:
                 final_frame = self.add_logo(final_frame)
 
-            path_for_new_image = os.path.join(self.save_dir, '__{:06d}.png'.format(self.frame_counter))
+            path_for_new_image = os.path.join(self.save_dir, '{:06d}.png'.format(self.frame_counter))
             final_frame_resized = cv2.resize(final_frame,
                                              (int(final_frame.shape[1] / self.resize_constant),
                                               int(final_frame.shape[0] / self.resize_constant)))
-            print(path_for_new_image)
             cv2.imwrite(path_for_new_image, final_frame_resized)
             self.frame_counter += 1
             if self.end is not None:
