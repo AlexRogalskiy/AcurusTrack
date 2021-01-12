@@ -166,7 +166,7 @@ class MainAlgo:
         while True:
             if frame_no not in self.full_meta.data:
                 frame_no += 1
-                if frame_no == self.end_frame:
+                if frame_no >= self.end_frame:
                     break
                 continue
             frame_info = self.full_meta.data[frame_no]
@@ -186,6 +186,8 @@ class MainAlgo:
                 if frame_no + MetaProcessingParams.overlap >= self.end_frame:
                     break
             frame_no += 1
+        if windows == {} and segment != {}:
+            windows[str(curr_start) + '_' + str(frame_no)] = segment
         assert windows
         return windows
 
@@ -229,7 +231,6 @@ class MainAlgo:
 
     @staticmethod
     def update_config_for_final():
-        AcceptanceParams.acc = 0.0
         os.environ['experiment_name_final'] = os.environ.get('exp_name') + '_merged_processed_final'
         os.environ['RES_DIR'] = os.path.join(
             os.environ.get('EXP_DIR'),
