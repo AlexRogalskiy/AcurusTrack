@@ -78,7 +78,7 @@ class LogicParams:
     face_or_pose_meta = 'face'  # meta processing nature
     parts_ = PoseParams if face_or_pose_meta == 'pose' else FaceParams
     init_params = PoseInitialisationParams if face_or_pose_meta == 'pose' else FaceInitialisationParams
-    use_final_merge = True  # use final merge or finish at concatenated
+    use_final_merge = False  # use final merge or finish at concatenated
 
 
 @dataclass
