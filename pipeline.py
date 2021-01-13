@@ -90,6 +90,9 @@ def make_new_numeration_pandas(func):
     return decorator
 
 
+import pandas as pd
+
+
 class MainAlgo:
     def __init__(self, detections, homography_dict,
                  global_start_frame=None, global_end_frame=None):
@@ -99,6 +102,7 @@ class MainAlgo:
 
         self.res_dir = os.environ.get('RES_DIR')
         self.homography = homography_dict
+        self.window_considered_pairs = {}
 
         self.start_frame, self.end_frame = self.determine_start_end(global_start_frame, global_end_frame, detections)
         self.full_meta = self.initialise_meta(detections, 'full')  # change detections inside
@@ -129,12 +133,16 @@ class MainAlgo:
     def analysis(self):
 
         self.process_windows_separately()
-        overlapped_windows = make_best_windows(
+        overlapped_windows, replace_rule = make_best_windows(
             self.res_dir)  # do merge by overlapped windows
         if len(self.wind_objects) > 1 and LogicParams.use_final_merge:
             final_meta = self.final_merge_single(overlapped_windows)
         else:
             final_meta = overlapped_windows
+        # final_meta = pd.read_csv(
+        #     '/Users/ksenia/Documents/work/results/preakness_states_1_45_2_05/acurus_0.9_update_12.01.2021_acc_0.3_preakness_CHECK_GITHUB__!!!!/acurus_0.9_update_12.01.2021_acc_0.3_preakness_CHECK_GITHUB__!!!!_merged_processed_final/_final/_final_LAST_TRUE.csv',
+        #     index_col=[0, 1])
+        # print('LOADED')
 
         return final_meta
 
@@ -202,6 +210,7 @@ class MainAlgo:
             tracker_obj = TrackerMerger(processed_meta, meta_object, files_work)
             # tracker_obj = TrackerMergerSpliter(processed_meta, meta_object, files_work)
             wind_objects.append(tracker_obj)
+            self.window_considered_pairs[name] = processed_meta.pairs_to_consider
         return wind_objects
 
     def initialise_meta(self, meta, name):
@@ -271,16 +280,18 @@ def make_best_windows(path_to_meta_folder):
     all_info = curr_meta
     indexes_curr = pdu.get_current_meta_indexes(curr_meta)
     counter_curr = len(indexes_curr) + 1
+    global_replace_rule = {}
 
     for i in range(1, len(chosen_files)):
         next_json_info = load_and_clean_csv(chosen_files[i])
-        all_info, counter_curr = pdu.merge_two_consecutive_windows(all_info, next_json_info,
-                                                                   counter_curr)
+        all_info, counter_curr, replace_rule = pdu.merge_two_consecutive_windows(all_info, next_json_info,
+                                                                                 counter_curr)
+        global_replace_rule[chosen_files[i]] = replace_rule
     all_info.to_csv(
         os.path.join(
             path_to_meta_folder,
             'final_processing_merged_MCMC.csv'))
-    return all_info
+    return all_info, global_replace_rule
 
 
 def window_processing(wind_obj, final_merge=None):

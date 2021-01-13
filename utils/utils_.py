@@ -80,6 +80,24 @@ def count_log_lkl_by_list(flatten_likelihoods):
     return likelihood
 
 
+def separate(x):
+    if x == 0:
+        return x
+    mul_clean = math.floor(math.log10(abs(x)))
+    mul = pow(10, mul_clean)
+    if mul == 0:
+        return 1, mul_clean
+    return round(x / mul), mul_clean
+
+
+def get_powers(data):
+    number_powers = {k: 0 for k in range(1, 11)}
+    for lkl in data:
+        number, power = separate(lkl)
+        number_powers[number] += power
+    return number_powers
+
+
 def choose_csv_from_dir(path_to_folder_to_choose_from):
     folders_ = os.listdir(path_to_folder_to_choose_from)
     folders_cleaned = [f for f in folders_ if os.path.isdir(os.path.join(path_to_folder_to_choose_from, f))]
@@ -121,3 +139,41 @@ def choose_best_csv_final_last(path_meta):
         choice = best_json[0]
     path_to_best_json = os.path.join(final_folder_path, choice)
     return path_to_best_json
+
+
+def list_split_in_consecutive_frames(list_of_values):
+    splitted_segments = []
+    curr_segment = []
+    for i in range(len(list_of_values)):
+        if i == 0:
+            continue
+        if list_of_values[i - 1] + 1 != list_of_values[i]:
+            # if not curr_segment:
+            curr_segment.append(list_of_values[i - 1])
+            splitted_segments.append(curr_segment)
+            curr_segment = []
+        else:
+            curr_segment.append(list_of_values[i - 1])
+        if i == len(list_of_values) - 1:
+            curr_segment.append(list_of_values[i])
+            splitted_segments.append(curr_segment)
+    return splitted_segments
+
+
+def tracks_position_analyis(id_1_frames, id_2_frames, id_1, id_2):
+    id_1_segments = list_split_in_consecutive_frames(id_1_frames)
+    id_2_segments = list_split_in_consecutive_frames(id_2_frames)
+    # assume they do not intersect
+    segments_union = id_1_segments + id_2_segments
+    # segments_ids = [id_1] * sum([len(i) for i in id_1_segments]) + [id_2] * sum([len(i) for i in id_2_segments])
+    segments_ids = [id_1] * len(id_1_segments) + [id_2] * len(id_2_segments)
+    segments_ids_sorted = sort_list(segments_union, segments_ids)
+    return segments_ids_sorted
+
+
+def sort_list(list1, list2):
+    zipped_pairs = zip(list1, list2)
+
+    z = [(x, y) for (y, x) in sorted(zipped_pairs)]
+
+    return z

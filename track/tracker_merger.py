@@ -16,9 +16,7 @@
 """
 
 import logging
-
 import numpy as np
-
 import utils.utils_ as util
 import utils.utils_pandas_df as pdu
 from config import AcceptanceParams
@@ -42,22 +40,38 @@ class TrackerMerger(AbstractTracker):
     def internal_loop(self):
         """ Algorithm loop inside the window """
         best_ratio = -np.inf
+        counter = 0
         while self.iteration < self.n_mc:
             self.iteration += 1
+            counter += 1
             self.complete_iter_number += 1
             self.accepted = False
             self.propose()  # make some movement
-            logging.debug('change track {} '.format(self.change_track))
+            logging.info('change track {} '.format(self.change_track))
             if self.returned_state:  # no ability to make chosen move
                 self.returned_state = False
                 continue
             if self.proposed_partition is None:  # no ability to make chosen move
                 continue
-            self.acc_obj.propose(self.proposed_partition[['frame_no', 'id']].values,
-                                 pdu.get_particular_states(self.proposed_partition,
-                                                           self.change_track[
-                                                               'new'])
-                                 )
+            states_proposed, frame_numbers_states = pdu.get_particular_states(self.proposed_partition,
+                                                                              self.change_track[
+                                                                                  'new'])
+            states_proposed = pdu.states_proposed_cleaning(states_proposed)
+            frame_numbers_indexes_proposed = self.proposed_partition[['frame_no', 'id']].values
+            frame_numbers_indexes_current = self.data_processing.dataframe[['frame_no', 'id']].values
+            indexes_for_every_frame_current = self.frames_numbers_analysis(frame_numbers_indexes_current)
+            indexes_for_every_frame_proposed = self.frames_numbers_analysis(frame_numbers_indexes_proposed)
+            states_current_with_gap, indexes_for_every_frame_gap_current, indexes_for_every_frame_gap_proposed, \
+            frames_numbers_to_remove_likelihoods, frames_numbers_states_current = self.states_analysis(
+                indexes_for_every_frame_current, indexes_for_every_frame_proposed, states_proposed,
+                frame_numbers_states)
+
+            states_proposed, states_current_with_gap = pdu.clean_states(states_proposed, states_current_with_gap)
+
+            self.acc_obj.current_tracks_probs_initialisation(indexes_for_every_frame_gap_current,
+                                                             states_current_with_gap, frames_numbers_states_current,
+                                                             frames_numbers_to_remove_likelihoods)
+            self.acc_obj.propose(indexes_for_every_frame_gap_proposed, states_proposed, frame_numbers_states)
             accepted_count = self.acc_obj.analyse_acceptance(self.change_track)
             if accepted_count is None:
                 continue

@@ -54,7 +54,7 @@ class MetaPartition:
             logging.info('observer is not exists')
 
     def notify(self):
-        logging.debug('notify')
+        logging.info('notify')
         """ Update each observer"""
         for observer in self._observers:
             observer.notify(self)
@@ -74,7 +74,7 @@ class MetaPartition:
         except ValueError as e:
             logging.info('Error: {}'.format(e))
         else:
-            logging.debug('data partititon setter')
+            logging.info('data partititon setter')
 
     @property
     def data_df(self):
@@ -88,7 +88,7 @@ class MetaPartition:
         except ValueError as e:
             logging.info('Error: {}'.format(e))
         else:
-            logging.debug('data_df partition setter')
+            logging.info('data_df partition setter')
             self.notify()
 
     def print_pandas(self):

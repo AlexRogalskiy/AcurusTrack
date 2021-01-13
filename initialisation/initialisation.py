@@ -22,9 +22,12 @@ from config import LogicParams
 
 class MetaInitialisation(ABC):
     @abstractmethod
-    def __init__(self, meta):
+    def __init__(self, meta, ids_counter=None):
         self.meta = meta
-        self.ids_counter = LogicParams.init_params.ids_counter
+        if ids_counter is not None:
+            self.ids_counter = ids_counter
+        else:
+            self.ids_counter = LogicParams.init_params.ids_counter
         self.first_frame_passed = False
         self.prev_frame_persons_list = None
         self.persons_info = []
@@ -75,16 +78,10 @@ class MetaInitialisation(ABC):
         self.persons_info = []
         if not self.first_frame_passed:
             # for the first frame assign as many ids as there are
-            for index, person in enumerate(frame_info):
+            for index, person in enumerate(frame_info, self.ids_counter):
                 new_info = self.set_info(person, index)
                 self.persons_info.append(new_info)
                 self.ids_counter += 1
             self.first_frame_passed = True
         else:
             self.analyse_two_consecutive_frames(frame_info)
-
-
-
-
-
-

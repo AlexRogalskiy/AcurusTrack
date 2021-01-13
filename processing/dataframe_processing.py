@@ -30,6 +30,7 @@ class DataframeProcessing:
     def __init__(self, meta_class):
         self.meta_class = meta_class
         self.frames_no = {}
+        self.ids_start_end = {}
         self.__dataframe = meta_class.data_df
         self.df_grouped_ids = self.dataframe.groupby([self.dataframe.id])
         self.main_info = self.get_df_info()
@@ -53,7 +54,7 @@ class DataframeProcessing:
         self.__dataframe = new_dataframe
         self.df_grouped_ids = new_dataframe.groupby([new_dataframe.id])
         self.main_info = self.get_df_info()
-        logging.debug('notify')
+        logging.info('notify')
         self.current_meta_indexes = pdu.get_current_meta_indexes(new_dataframe)
         self.frames_no = {}
         self.df_grouped_ids.apply(
@@ -61,6 +62,7 @@ class DataframeProcessing:
         for key in MetaProcessingParams.false_indexes:
             if key in self.frames_no.keys():
                 self.frames_no.pop(key)
+        self.take_start_end_of_tracks()
         self.states = self.df_grouped_ids.apply(pdu.get_tracks,
                                                 LogicParams.parts_.keys_to_use_for_estimation_pairs).to_dict()
         self.pairs_to_consider = self.choose_non_overlapped_pairs()
@@ -130,6 +132,7 @@ class DataframeProcessing:
         for key in MetaProcessingParams.false_indexes:
             if key in self.frames_no.keys():
                 self.frames_no.pop(key)
+        self.take_start_end_of_tracks()
         self.states = self.df_grouped_ids.apply(pdu.get_tracks,
                                                 LogicParams.parts_.keys_to_use_for_estimation_pairs).to_dict()
 
@@ -139,14 +142,18 @@ class DataframeProcessing:
         return set(self.frames_no[pair[0]]).intersection(
             self.frames_no[pair[1]]) == set()
 
+    def take_start_end_of_tracks(self):
+        self.ids_start_end = {}
+        for id, frame_numbers in self.frames_no.items():
+            self.ids_start_end[id] = {'start': frame_numbers[0], 'end': frame_numbers[-1]}
+
     def choose_non_overlapped_pairs(self):
         ids_combinations = list(combinations(self.frames_no.keys(), 2))
         intersect_or_not = np.array(
             list(map(self.check_intersection_dict, ids_combinations)))
         chosen_pairs = []
         if intersect_or_not != []:
-            chosen_pairs = list(
-                np.array(ids_combinations)[
-                    intersect_or_not])
-
+            chosen_pairs = np.array(ids_combinations)[
+                intersect_or_not].tolist()
+            chosen_pairs = list(map(tuple, chosen_pairs))
         return chosen_pairs

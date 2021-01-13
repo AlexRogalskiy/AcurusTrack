@@ -196,49 +196,58 @@ def get_tracks(dataframe_meta, names):
         dataframe_meta.index[0][0], dataframe_meta.index[-1][0] + 1)
     dropped = dataframe_meta.reset_index(level=1, drop=True)
     fixed_dataframe = dropped.reindex(range_)
+    all_body_parts_frames_numbers = {}
     all_body_parts_tracks = {}
     for body_part_pair in names:
-        curr_pair_states = body_parts_pair_processing(
-            fixed_dataframe, body_part_pair)
+        curr_pair_states, curr_pair_frames_numbers = body_parts_pair_processing(
+            fixed_dataframe, body_part_pair, range_)
         if curr_pair_states:
-            all_body_parts_tracks[tuple(body_part_pair)] = curr_pair_states
-    return all_body_parts_tracks
+            all_body_parts_tracks[tuple(body_part_pair)] = np.stack(curr_pair_states, axis=1)
+            all_body_parts_frames_numbers[tuple(body_part_pair)] = curr_pair_frames_numbers
+    return all_body_parts_tracks, all_body_parts_frames_numbers
 
 
 def body_parts_pair_processing(
-        fixed_dataframe, body_part_pair, minimal_len_to_consider=3):
+        fixed_dataframe, body_part_pair, id_frames_range, minimal_len_to_consider=3):
     """ Return some body parts coordinates."""
     curr_pair_states = []
+    curr_pair_frames = []
     for key in body_part_pair:
         curr_body_part_track = fixed_dataframe[key].values.tolist()
 
-        no_zeros_meta = clean_pose(curr_body_part_track)
+        no_zeros_meta, no_zero_frames_numbers = clean_pose(curr_body_part_track, id_frames_range)
         if no_zeros_meta is None:
             break
-        no_zeros_processed_meta = clean_nans_in_pose_meta(no_zeros_meta)
+        no_zeros_processed_meta, no_zero_processed_frames = clean_nans_in_pose_meta(no_zeros_meta,
+                                                                                    no_zero_frames_numbers)
         if len(no_zeros_processed_meta) >= minimal_len_to_consider:
             curr_pair_states.append(no_zeros_processed_meta)
-    return curr_pair_states
+            if not curr_pair_frames:  # append one time only, the same for x and y
+                curr_pair_frames = no_zero_processed_frames
+    return curr_pair_states, curr_pair_frames
 
 
-def clean_pose(body_part_track):
+def clean_pose(body_part_track, body_part_frames_numbers):
     """ Pose estimator return zero values for body parts it could not find,
      it should not be taken into consideration.
 
     """
     cleaned_track = []
+    cleaned_track_frames = []
     for index, elem in enumerate(body_part_track):
         if elem == 0:
             if index in [0, len(body_part_track) - 1]:
                 continue
-            if len(cleaned_track) >= 2:
+            if len(cleaned_track) >= 2:  # if zero inside, set nan
                 cleaned_track.append(np.nan)
+                cleaned_track_frames.append(body_part_frames_numbers[index])
         else:
             cleaned_track.append(elem)
-    return cleaned_track if len(cleaned_track) > 1 else None
+            cleaned_track_frames.append(body_part_frames_numbers[index])
+    return (cleaned_track, cleaned_track_frames) if len(cleaned_track) > 1 else (None, None)
 
 
-def clean_nans_in_pose_meta(body_part_track):
+def clean_nans_in_pose_meta(body_part_track, body_part_frames):
     """ Clean track, beginning from nan, as Kalman filter
     cannot be initialised with nans.
 
@@ -246,20 +255,64 @@ def clean_nans_in_pose_meta(body_part_track):
     while np.isnan(body_part_track[0]) or np.isnan(
             body_part_track[1]):  # remove nans from the beginning for right kalman initialisation
         del body_part_track[0]
+        del body_part_frames[0]
         if len(body_part_track) <= 1:
             break
-    return body_part_track
+    return body_part_track, body_part_frames
 
 
 def get_particular_states(dataframe, list_of_indexes):
     """ Return track coordinates for particular indexes."""
     states = {}
+    frame_numbers_states = {}
     for i in list_of_indexes:
         group1 = dataframe[dataframe.id == i].copy(deep=True)
-        states[i] = get_tracks(
+        states[i], frame_numbers_states[i] = get_tracks(
             group1, LogicParams.parts_.keys_to_use_for_estimation_pairs)
-    return states
+    return states, frame_numbers_states
 
+
+def states_proposed_cleaning(states):
+    """ Clean states if end is too short or absent"""
+    cleaned_states = {}
+    for state_index, states_values in states.items():
+        cleaned_states[state_index] = {}
+        for pair_name, pair_values in states_values.items():
+            len_curr_values = len(pair_values)
+            non_nan_nearest = None
+            for i in range(len_curr_values, 1):
+                if not np.isnan(pair_values[i - 1]):
+                    non_nan_nearest = len_curr_values - i - 1
+            if np.all(np.isnan(pair_values[-1])):
+                continue  # do not take states if its too short
+            elif non_nan_nearest is not None:
+                if non_nan_nearest <= 2:
+                    continue
+            else:
+                cleaned_states[state_index][pair_name] = pair_values
+    return cleaned_states
+
+
+def clean_states(states_proposed, states_current):
+    """ Clean states at some keys by length"""
+    pair_names_to_delete = []
+    passed_states_current = {}
+    passed_states_proposed = {}
+    for ids, id_values in states_current.items():
+        for pair_name, pair_values in id_values.items():
+            if len(pair_values) <= 2 and pair_name not in pair_names_to_delete:
+                pair_names_to_delete.append(pair_name)
+    for id, id_values in states_proposed.items():
+        passed_states_proposed[id] = {}
+        for pair_name, pair_values in id_values.items():
+            if pair_name not in pair_names_to_delete:
+                passed_states_proposed[id][pair_name] = pair_values
+    for id, id_values in states_current.items():
+        passed_states_current[id] = {}
+        for pair_name, pair_values in id_values.items():
+            if pair_name not in pair_names_to_delete:
+                passed_states_current[id][pair_name] = pair_values
+    return passed_states_proposed, passed_states_current
 
 def get_frames_numbers(meta, global_dict):
     global_dict[meta['id'].values.tolist(
@@ -284,7 +337,7 @@ def merge_two_consecutive_windows(
     next_df = next_window_dataframe.replace({'id': replace_rule})
     merged_final_df = pd.concat([prev_window_dataframe, next_df]).groupby(
         level=[0, 1]).last().drop_duplicates()
-    return merged_final_df, counter
+    return merged_final_df, counter, replace_rule
 
 
 def find_intersection_indexes(prev_window_dataframe, next_window_dataframe):

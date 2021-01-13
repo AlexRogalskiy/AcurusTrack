@@ -29,6 +29,7 @@ import visualization.visualization as visu
 from additional.kalman_filter import KalmanFilter
 from config import AcceptanceParams, LogicParams, DrawingParams, MetaProcessingParams
 from config import KalmanParams
+import utils.utils_math as utils_math
 
 
 class AbstractTracker(ABC):
@@ -61,7 +62,7 @@ class AbstractTracker(ABC):
         self.returned_state = False
         self.proposed_partition = None
         self.df_grouped_ids_proposed = None
-        self.acc_obj = Acceptance(data_processing.dataframe[['frame_no', 'id']].values, data_processing.states)
+        self.acc_obj = Acceptance()
         self.iteration = 0
         self.complete_iter_number = 0
         self.accepted = False
@@ -98,6 +99,65 @@ class AbstractTracker(ABC):
     def propose(self):
         raise NotImplementedError("Must override propose")
 
+    def get_current_id_(self, segments_ids, frame_no):
+        i = [i for i in range(len(segments_ids) - 1) if
+             segments_ids[i][1][0] <= frame_no < segments_ids[i + 1][1][0]]
+        if i:
+            assert len(i) == 1
+            i = i[0]
+            curr_id_to_continue = segments_ids[i][0]
+        else:
+            curr_id_to_continue = segments_ids[-1][0]
+        return curr_id_to_continue
+
+    def states_analysis(self, frame_numbers_indexes_current, frame_numbers_indexes_proposed, states,
+                        frame_numbers_states):  # gaps will be filled in in Kalman filter
+        new_track_id = self.change_track['new'][0]
+        id_1 = self.change_track['current'][0]
+        id_2 = self.change_track['current'][1]
+        states_tracks = {id_1: {}, id_2: {}}
+        segments_ids = util.tracks_position_analyis(self.data_processing.frames_no[id_1],
+                                                    self.data_processing.frames_no[id_2], id_1,
+                                                    id_2)
+        frames_numbers_to_remove_likelihoods = {id_1: {}, id_2: {}}
+        frames_numbers_states_current = {id_1: {}, id_2: {}}
+        for pair_name, states_values in states[new_track_id].items():
+            for key, value in states_tracks.items():
+                states_tracks[key][pair_name] = []
+                frames_numbers_to_remove_likelihoods[key][pair_name] = []
+                frames_numbers_states_current[key][pair_name] = []
+            states_new_track = np.stack(states_values)
+            for index, (frame_no, state) in enumerate(
+                    zip(frame_numbers_states[new_track_id][pair_name], states_new_track)):
+                curr_id_to_continue = self.get_current_id_(segments_ids, frame_no)
+                second_id = id_1 if curr_id_to_continue == id_2 else id_2
+                next_is_nan = False
+                if index + 1 < len(states_new_track) and np.all(np.isnan(states_new_track[index + 1])):
+                    next_is_nan = True
+                if (np.all(np.isnan(state)) or next_is_nan) and not states_tracks[curr_id_to_continue][
+                    pair_name]:  # if this track begin from nan or second is nan - there will no be initiaal state in kalman
+                    old_sec_id = second_id
+                    second_id = curr_id_to_continue
+                    curr_id_to_continue = old_sec_id
+                states_tracks[curr_id_to_continue][pair_name].append(state.tolist())
+                frames_numbers_states_current[curr_id_to_continue][pair_name].append(frame_no)
+
+                if states_tracks[second_id][pair_name] != [] and second_id in [j[0] for j in segments_ids if
+                                                                               j[1][0] > frame_no]:
+                    states_tracks[second_id][pair_name].append([np.nan, np.nan])
+                    frames_numbers_states_current[second_id][pair_name].append(frame_no)
+                    frames_numbers_to_remove_likelihoods[second_id][pair_name].append(frame_no)
+        return states_tracks, frame_numbers_indexes_current, frame_numbers_indexes_proposed, frames_numbers_to_remove_likelihoods, frames_numbers_states_current
+
+    def frames_numbers_analysis(self, frame_numbers_indexes):
+        # frames_numbers, counts = np.unique(frame_numbers_indexes[:, 0], return_counts=True)
+        indexes_for_every_frame = {}
+        for element in frame_numbers_indexes:
+            if element[0] not in indexes_for_every_frame:
+                indexes_for_every_frame[element[0]] = []
+            indexes_for_every_frame[element[0]].append(element[1])
+        return indexes_for_every_frame
+
     def final_merge_loop(self):
         flag = True
         check_ = 0
@@ -113,12 +173,14 @@ class AbstractTracker(ABC):
             for index, pair in enumerate(self.data_processing.pairs_to_consider):
                 self.cur_iter_name = str(counter) + '_' + str(pair)
                 logging.debug('pair {} '.format(pair))
+
                 if break_to_while:
                     check_ = 0
                     break
                 self.accepted = False
                 self.merge_move(final_merge=True,
                                 pair=pair)
+                logging.debug('self.change_track {} '.format(self.change_track))
                 if self.proposed_partition is None:
                     if check_ >= len(self.data_processing.pairs_to_considercleaned) ** 2:
                         break_to_while = False
@@ -127,10 +189,23 @@ class AbstractTracker(ABC):
                     else:
                         check_ += 1
                         continue
-                self.acc_obj.propose(self.proposed_partition[['frame_no', 'id']].values,
-                                     pdu.get_particular_states(self.proposed_partition,
-                                                               self.change_track[
-                                                                   'new']))
+                states_proposed, frame_numbers_states = pdu.get_particular_states(self.proposed_partition,
+                                                                                  self.change_track[
+                                                                                      'new'])
+                states_proposed = pdu.states_proposed_cleaning(states_proposed)
+                frame_numbers_indexes_proposed = self.proposed_partition[['frame_no', 'id']].values
+                frame_numbers_indexes_current = self.data_processing.dataframe[['frame_no', 'id']].values
+                indexes_for_every_frame_current = self.frames_numbers_analysis(frame_numbers_indexes_current)
+                indexes_for_every_frame_proposed = self.frames_numbers_analysis(frame_numbers_indexes_proposed)
+                states_current_with_gap, indexes_for_every_frame_gap_current, indexes_for_every_frame_gap_proposed, \
+                frames_numbers_to_remove_likelihoods, frames_numbers_states_current = self.states_analysis(
+                    indexes_for_every_frame_current, indexes_for_every_frame_proposed, states_proposed,
+                    frame_numbers_states)
+                states_proposed, states_current_with_gap = pdu.clean_states(states_proposed, states_current_with_gap)
+                self.acc_obj.current_tracks_probs_initialisation(indexes_for_every_frame_gap_current,
+                                                                 states_current_with_gap, frames_numbers_states_current,
+                                                                 frames_numbers_to_remove_likelihoods)
+                self.acc_obj.propose(indexes_for_every_frame_gap_proposed, states_proposed, frame_numbers_states)
 
                 accepted_count = self.acc_obj.analyse_acceptance(self.change_track)
                 ratio = max(list(
@@ -170,17 +245,17 @@ class AbstractTracker(ABC):
     def create_new_partition_merge(self, pair_chosen):
         self.change_track['current'] = [pair_chosen[0], pair_chosen[1]]
         new_df = self.data_processing.dataframe.copy(deep=True)
-        new_df = pdu.change_index_in_df(new_df, pair_chosen[0], max(
-            self.data_processing.current_meta_indexes) + 1)
-        new_df = pdu.change_index_in_df(new_df, pair_chosen[1], max(self.data_processing.current_meta_indexes) + 1)
+        new_index = max(self.data_processing.current_meta_indexes) + 1
+        new_df = pdu.change_index_in_df(new_df, pair_chosen[0], new_index)
+        new_df = pdu.change_index_in_df(new_df, pair_chosen[1], new_index)
 
         self.proposed_partition = new_df
         self.df_grouped_ids_proposed = new_df.groupby([new_df.id])
-        self.change_track['new'] = [max(self.data_processing.current_meta_indexes) + 1]
+        self.change_track['new'] = [new_index]
 
 
 class Acceptance:
-    def __init__(self, frame_no_ind, states_):
+    def __init__(self):
         """
 
         :param frame_no_ind: list of lists in the form [[frame_no, ind], [frame_no, ind], ...] - information for priors computation
@@ -190,16 +265,22 @@ class Acceptance:
         self.u_random_curr_iter = np.random.random()
         self.curr_acceptance = 0
         self.ratio = {}
-        self.curr_priors_obj = Priors(frame_no_ind)
-        self.curr_liks_obj = Likelihoods(states_)
+        self.curr_priors_obj = None
+        self.curr_liks_obj = None
         self.acceptance = {}
         self.proposed_priors_obj = None
         self.proposed_liks_obj = None
 
-    def propose(self, frame_no_ind, states):
+    def current_tracks_probs_initialisation(self, frame_no_ind, states_, states_frames_numbers,
+                                            frames_numbers_do_not_consider):
+        self.curr_priors_obj = Priors(frame_no_ind)
+        self.curr_liks_obj = Likelihoods(states_, states_frames_numbers, frames_numbers_do_not_consider)
+
+    def propose(self, frame_no_ind, states, states_frames_numbers, frames_numbers_do_not_consider=None):
+        assert frames_numbers_do_not_consider is None
         self.u_random_curr_iter = np.random.random()
         self.proposed_priors_obj = Priors(frame_no_ind)
-        self.proposed_liks_obj = Likelihoods(states)
+        self.proposed_liks_obj = Likelihoods(states, states_frames_numbers, frames_numbers_do_not_consider)
 
     def analyse_acceptance(self, change_track):
         """ Analyzing ratio and acceptance. """
@@ -232,9 +313,7 @@ class Acceptance:
         priors_obj.compute_priors()
 
     def get_acceptance(self, change_track):
-        if not self.first_iteration_done:
-            self.get_posterior(self.curr_liks_obj, self.curr_priors_obj)
-            self.first_iteration_done = True  # should compute only first time
+        self.get_posterior(self.curr_liks_obj, self.curr_priors_obj)
         self.get_posterior(self.proposed_liks_obj, self.proposed_priors_obj)
         self.ratio = {}
 
@@ -243,7 +322,7 @@ class Acceptance:
             ratio = self.compute_ratio(pair, change_track)
             self.ratio[pair] = ratio
             self.analyse_ratio(pair)
-
+        logging.info('ratio {} '.format(self.ratio))
         return self.acceptance
 
     def analyse_ratio(self, pair):
@@ -255,14 +334,34 @@ class Acceptance:
         else:
             self.acceptance[pair] = 0
 
-    def compute_ratio(self, pair, change_track):
+    def likelihoods_preparation(self, likelihoods, name):
+        logging.debug(' {} : {}'.format(name, likelihoods))
+        likelihoods_rounded = [utils_math.roundFirst(x) for x in likelihoods]
 
+        return likelihoods_rounded
+
+    def likelihoods_multiplication(self, new_diff_curr,
+                                   curr_diff_new):  # cannot kist multiply, on long time segment product will be zero
+        numbers_powers_new_d_c = util.get_powers(new_diff_curr)
+        numbers_powers_curr_d_new = util.get_powers(curr_diff_new)
+        values = 0
+        for key, value in numbers_powers_curr_d_new.items():
+            values += numbers_powers_new_d_c[key] - value
+        power = values / len(curr_diff_new)
+        lkls_ratio = 10 ** power
+        return lkls_ratio
+
+    def compute_ratio(self, pair, change_track):
         priors_curr_diff_new = list((Counter(self.curr_priors_obj.priors_numbers) - (
             Counter(self.proposed_priors_obj.priors_numbers))).elements())
         priors_new_diff_curr = list((Counter(self.proposed_priors_obj.priors_numbers) - Counter(
             self.curr_priors_obj.priors_numbers)).elements())
         priors_d = (np.prod(np.array(priors_new_diff_curr)) / np.prod(
             np.array(priors_curr_diff_new)))
+
+        logging.debug('priors_new_diff_curr {} '.format(priors_new_diff_curr))
+        logging.debug('priors_curr_diff_new {} '.format(priors_curr_diff_new))
+
         proposed_likelihoods_for_consideration = self.proposed_liks_obj.sort_by_pairs()
         current_likelihoods_for_consideration = \
             self.curr_liks_obj.sort_by_pairs(particular_ids=change_track['current'])
@@ -272,17 +371,22 @@ class Acceptance:
         except KeyError:
             logging.info('no states for {} pair'.format(pair))
             return 0
-
-        lkls_new_diff_curr = list((Counter(proposed_likelihoods_for_consideration_curr_pair) - (
+        assert len(proposed_likelihoods_for_consideration_curr_pair) == len(
+            current_likelihoods_for_consideration_curr_pair) + 2
+        proposed_likelihoods_for_consideration_curr_pair_prepared = self.likelihoods_preparation(
+            proposed_likelihoods_for_consideration_curr_pair, 'proposed')
+        current_likelihoods_for_consideration_curr_pair_prepared = self.likelihoods_preparation(
+            current_likelihoods_for_consideration_curr_pair, 'current')
+        lkls_new_diff_curr = list((Counter(proposed_likelihoods_for_consideration_curr_pair_prepared) - (
             Counter(
-                current_likelihoods_for_consideration_curr_pair))).elements())  # for precision and performance, consider only difference
-        lkls_curr_diff_new = list((Counter(current_likelihoods_for_consideration_curr_pair) - Counter(
-            proposed_likelihoods_for_consideration_curr_pair)).elements())
-        lkls_d = (
-                util.count_log_lkl_by_list(lkls_new_diff_curr) /
-                util.count_log_lkl_by_list(lkls_curr_diff_new))
-
-        ratio = priors_d * lkls_d
+                current_likelihoods_for_consideration_curr_pair_prepared))).elements())  # for precision and performance, consider only difference
+        lkls_curr_diff_new = list((Counter(current_likelihoods_for_consideration_curr_pair_prepared) - Counter(
+            proposed_likelihoods_for_consideration_curr_pair_prepared)).elements())
+        lkls_ratio = self.likelihoods_multiplication(lkls_new_diff_curr, lkls_curr_diff_new)
+        # lkls_ratio = (
+        #         util.count_log_lkl_by_list(lkls_new_diff_curr) /
+        #         util.count_log_lkl_by_list(lkls_curr_diff_new))
+        ratio = priors_d * lkls_ratio
         return ratio
 
     def choose_likelihoods_of_difference(self, pair, change_track):
@@ -304,9 +408,11 @@ class Acceptance:
 
 
 class Likelihoods:
-    def __init__(self, states_likelihoods_need):
+    def __init__(self, states_likelihoods_need, states_frames_numbers, frames_numbers_do_not_consider=None):
         self.filter = Filter()
         self.__states = states_likelihoods_need
+        self.__states_frames_numbers = states_frames_numbers
+        self.__frames_numbers_do_not_consider = frames_numbers_do_not_consider
         self.__likelihoods = {}
         self.likelihood = {}
 
@@ -324,13 +430,15 @@ class Likelihoods:
         self.__likelihoods.update(new_liks_id)
 
     def compute_likelihood(self):
+
         for track_index, track_state in self.__states.items():
             assert track_index not in MetaProcessingParams.false_indexes
             self.__likelihoods[track_index] = {}
             for pair_name, pair_state in track_state.items():
                 if pair_name not in LogicParams.parts_.keys_to_use_for_estimation_pairs:
                     continue
-                final_states = np.stack(pair_state, axis=1)
+                # final_states = np.stack(pair_state, axis=1)
+                final_states = pair_state
                 assert len(final_states) > 2  # for kalman
                 self.find_single_likelihood(
                     final_states, pair_name, track_index)
@@ -347,9 +455,20 @@ class Likelihoods:
         mu, cov, likelihoods = self.filter.get_likelihoods_with_kalman_filter(
             final_states)
         if likelihoods:
+            likelihoods_ready = likelihoods
+            if self.__frames_numbers_do_not_consider is not None:
+                if self.__frames_numbers_do_not_consider[track_index][pair_name]:
+                    likelihoods_ready = self.clean_likelihoods(likelihoods, track_index, pair_name)
             self.__likelihoods[
                 track_index][
-                pair_name] = likelihoods
+                pair_name] = likelihoods_ready
+
+    def clean_likelihoods(self, likelihoods, track_index, pair_name):
+        cleaned_likelihoods = []
+        for frame_no, lkl in zip(self.__states_frames_numbers[track_index][pair_name], likelihoods):
+            if frame_no not in self.__frames_numbers_do_not_consider[track_index][pair_name]:
+                cleaned_likelihoods.append(lkl)
+        return cleaned_likelihoods
 
     def sort_by_pairs(self, particular_ids=None):
         new_likelihoods = {}
@@ -368,8 +487,9 @@ class Likelihoods:
 
 
 class Priors:
-    def __init__(self, arr):
-        self.arr = arr
+    def __init__(self, indexes_for_every_frame):
+        self.indexes_for_every_frame = indexes_for_every_frame
+        self.indexes_for_every_frame_values = list(self.indexes_for_every_frame.values())
         self._priors = None
         self.e_t_factrs = None
         self.a_t = None
@@ -378,7 +498,6 @@ class Priors:
         self.d_t = None
         self.f_t = None
         self.g_t = None
-        self.indexes_for_every_frame = None
         self.e_t_1 = None
         self.tracks_numbers_at_curr_frame = None
         self.tracks_numbers_at_prev_frame = None
@@ -394,25 +513,25 @@ class Priors:
         return curr_prior
 
     def process_meta(self):
-        indexes_for_every_frame_ = np.split(self.arr[:, 1], np.cumsum(
-            np.unique(self.arr[:, 0], return_counts=True)[1])[:-1])
-        indexes_for_every_frame = [list(index)
-                                   for index in indexes_for_every_frame_]
-        self.indexes_for_every_frame = list(
-            map(pdu.remove_str_from_indexes, indexes_for_every_frame))
+        # indexes_for_every_frame_ = np.split(self.arr[:, 1], np.cumsum(
+        #     np.unique(self.arr[:, 0], return_counts=True)[1])[:-1])
+        # indexes_for_every_frame = [list(index)
+        #                            for index in indexes_for_every_frame_]
+        self.indexes_for_every_frame_values = list(
+            map(pdu.remove_str_from_indexes, self.indexes_for_every_frame_values))
         len_indexes_for_every_frame = list(
-            map(pdu.get_len_single, indexes_for_every_frame))
+            map(pdu.get_len_single, self.indexes_for_every_frame_values))
         self.det_falses = list(
-            map(pdu.get_false_inds_and_detections, indexes_for_every_frame[1:]))
+            map(pdu.get_false_inds_and_detections, self.indexes_for_every_frame_values[1:]))
         self.e_t_1 = len_indexes_for_every_frame[:-1]
-        self.tracks_numbers_at_curr_frame = indexes_for_every_frame[1:]
-        self.tracks_numbers_at_prev_frame = indexes_for_every_frame[:-1]
+        self.tracks_numbers_at_curr_frame = self.indexes_for_every_frame_values[1:]
+        self.tracks_numbers_at_prev_frame = self.indexes_for_every_frame_values[:-1]
 
     def get_characteristics_priors(self):
         """ Compute characteristics according to the article."""
 
         self.e_t_factrs = list(
-            map(pdu.get_len_single_fact, self.indexes_for_every_frame[1:]))
+            map(pdu.get_len_single_fact, self.indexes_for_every_frame_values[1:]))
         self.a_t = list(map(pdu.diff_consecutive_frames,
                             self.tracks_numbers_at_curr_frame,
                             self.tracks_numbers_at_prev_frame))

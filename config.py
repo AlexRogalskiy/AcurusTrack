@@ -78,7 +78,7 @@ class LogicParams:
     face_or_pose_meta = 'face'  # meta processing nature
     parts_ = PoseParams if face_or_pose_meta == 'pose' else FaceParams
     init_params = PoseInitialisationParams if face_or_pose_meta == 'pose' else FaceInitialisationParams
-    use_final_merge = False  # use final merge or finish at concatenated
+    use_final_merge = True  # use final merge or finish at concatenated
 
 
 @dataclass
@@ -125,17 +125,17 @@ class AcceptanceParams:
     p_d = 0.9  # detection probability
     lambda_b = 0.2  # birth rate of new objects per unit time, per unit volume
     lambda_f = 0.001  # the false alarm rate per unit time, per unit volume
-    acc = 0.1
+    acc = 0.3
     number_of_acc_for_acc = 1  # how much parts should satisfy by acceptance condition to be considered as accepted move
     use_random_u = False
 
 
 @dataclass
 class MetaProcessingParams:
-    len_to_make_trash_index = 2  # throw out tracks with length less or equal this parameter
+    len_to_make_trash_index = 5  # throw out tracks with length less or equal this parameter
     false_indexes = [-1, -10, -100, -200,
                      np.nan]
     max_tracks_number_at_window = 30
     renumbering = True
     overlap = 10
-    fixed_coordinate_system = True
+    fixed_coordinate_system = False
