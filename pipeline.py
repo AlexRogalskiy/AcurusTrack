@@ -139,10 +139,6 @@ class MainAlgo:
             final_meta = self.final_merge_single(overlapped_windows)
         else:
             final_meta = overlapped_windows
-        # final_meta = pd.read_csv(
-        #     '/Users/ksenia/Documents/work/results/preakness_states_1_45_2_05/acurus_0.9_update_12.01.2021_acc_0.3_preakness_CHECK_GITHUB__!!!!/acurus_0.9_update_12.01.2021_acc_0.3_preakness_CHECK_GITHUB__!!!!_merged_processed_final/_final/_final_LAST_TRUE.csv',
-        #     index_col=[0, 1])
-        # print('LOADED')
 
         return final_meta
 
