@@ -7,6 +7,9 @@ This repository is a work of AIHunters.
 
 We got inspired by the article describing the Markov chain Monte Carlo data association. For fairly simple cases we're releasing this slightly shorter version. But if you are interested in a full version, or have business cases for any of the two versions, feel free to contact us at oss@aihunters.com for more information.
 
+### Pipeline conceptual representation 
+ ![](examples/images/acurustrack%20workflow.png)
+
 ### Use Cases
 * Complicated multi-occlusion movement 
 
