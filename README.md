@@ -66,7 +66,7 @@ More information about the parameters you can find in config.py
 ### Clean the data
 
 
-To enhance accuracy, we recommend using the EvenVizion component which allows transfer to a fixed coordinate system.
+To enhance accuracy, we recommend using the [EvenVizion](https://github.com/AIHunters/EvenVizion) component which allows transfer to a fixed coordinate system.
 If you choose to use it:
 
 * navigate to the FCS;
@@ -106,9 +106,6 @@ If you choose to use it:
     * visualization.py - functions for custom meta visualization
     ![meta_visualization](examples/images/meta_vis_aihunters.png)
     
-### Important notice
-
-Please NOTE that we have slightly changed a souce code of the filterpy library, you can find it at repository.
 
 ###  Run the analysis
 
@@ -129,13 +126,24 @@ We decided to compare our AcurusTrack component (right) with one of the popular 
 
 
 As you can see, the accuracy is higher when using AcurusTrack (especially in the presence of occlusions and camera movement).
-    
-    
+
+### Important notice
+
+- Please NOTE that we have changed a souce code of the filterpy library slightly, you can find it at the repository.
+- Pay close attention to the configureable parameters as they include important control features. 
+
+
+### Latest updates
+
+Single-shot multi-object tracking was added in the latest release AS AN EXPERIMENT. You can try using it for your cases. 
+
+
 ### License 
 AcurusTrack is licensed under the GNU General Public License, either version 3 of the License, or (at your option) any later version.
 All the third-party open-source software used in this project is listed in Third-Party Open Source Software Notice together with the according licenses. 
 
 https://github.com/AIHunters/AcurusTrack
+
 
 ### Send us your feedback
 
