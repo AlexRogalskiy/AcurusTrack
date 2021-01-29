@@ -132,8 +132,8 @@ As you can see, the accuracy is higher when using AcurusTrack (especially in the
 
 ### Important notice
 
-- Please NOTE that we have changed a souce code of the filterpy library slightly, you can find it at the repository.
-- Pay close attention to the configureable parameters as they include important control features. 
+- Please NOTE that we have changed a source code of the filterpy library slightly, you can find it at the repository.
+- Pay close attention to the configurable parameters as they include important control features. 
 
 
 ### Latest updates
