@@ -1,0 +1,9 @@
+.idea/codestream.xml
+.idea/credits-detection.iml
+.idea/deployment.xml
+.idea/inspectionProfiles/
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml
+venv/*
+__pycache__/*

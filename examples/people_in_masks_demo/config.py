@@ -1,3 +1,5 @@
+# insert these parameters in config.py at root directory
+
 import matplotlib.colors as mcolors
 import numpy as np
 
@@ -54,7 +56,7 @@ class PoseParams:
 class FaceParams:
     keys_to_use_for_estimation_pairs = [('center_x', 'center_y')]
     keys_to_use_for_estimation = ['center_x', 'center_y', 'frame_no']
-    keys_to_use_for_fcs = [('center_x', 'center_y'), ('x1', 'y1'), ('x2', 'y2')] # should be all keys !!!
+    keys_to_use_for_fcs = [('center_x', 'center_y'), ('x1', 'y1'), ('x2', 'y2')]  # should be all keys !!!
     # keys_pairs = ["x1", "x2", "y1", "y2"]
 
 
